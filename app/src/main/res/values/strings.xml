@@ -1,0 +1,12 @@
+<resources>
+    <string name="app_name">Voice Transcription App</string>
+    <string name="record_button">Record</string>
+    <string name="stop_recording">Stop Recording</string>
+    <string name="transcription_placeholder">Transcription will appear here...</string>
+    <string name="recording_status">Recording...</string>
+    <string name="processing_status">Processing...</string>
+    <string name="error_recording">Error recording audio</string>
+    <string name="error_transcription">Error transcribing audio</string>
+    <string name="permission_required">Microphone permission is required</string>
+    <string name="permission_denied">Permission denied</string>
+</resources>
