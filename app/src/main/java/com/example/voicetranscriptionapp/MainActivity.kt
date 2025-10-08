@@ -25,11 +25,13 @@ class MainActivity : AppCompatActivity() {
     private var audioFile: File? = null
     private var isRecording = false
     private lateinit var transcriptionService: TranscriptionService
+    private lateinit var localWhisperService: LocalWhisperService
     private lateinit var ttsService: OpenAiTtsService
     private lateinit var androidTtsService: AndroidTtsService
     private var mediaPlayer: MediaPlayer? = null
     private var recordingStartTime: Long = 0
     private var useFastTts = true // Toggle between Android TTS (fast) and OpenAI TTS (quality)
+    private var useLocalWhisper = true // Toggle between Local Whisper (offline) and Cloud Whisper (API)
 
     private val requestPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -47,12 +49,30 @@ class MainActivity : AppCompatActivity() {
         setContentView(binding.root)
 
         transcriptionService = TranscriptionService()
+        localWhisperService = LocalWhisperService(this)
         ttsService = OpenAiTtsService()
         androidTtsService = AndroidTtsService(this)
         
-        // Initialize Android TTS early for faster first use
+        // Initialize services
         androidTtsService.initialize {
             Log.d("MainActivity", "Android TTS ready")
+        }
+        
+        // Initialize local Whisper in background
+        lifecycleScope.launch {
+            val initialized = localWhisperService.initialize()
+            if (initialized) {
+                Log.d("MainActivity", "Local Whisper ready")
+                withContext(Dispatchers.Main) {
+                    updateSttModeIndicator()
+                }
+            } else {
+                Log.w("MainActivity", "Local Whisper not available, using cloud")
+                useLocalWhisper = false
+                withContext(Dispatchers.Main) {
+                    updateSttModeIndicator()
+                }
+            }
         }
 
         setupUI()
@@ -78,13 +98,36 @@ class MainActivity : AppCompatActivity() {
         
         // TTS Mode toggle button
         updateTtsModeButton()
+        updateSttModeIndicator()
+        
         binding.recordButton.setOnLongClickListener {
             // Long press to toggle TTS mode
             useFastTts = !useFastTts
             updateTtsModeButton()
             val mode = if (useFastTts) "Fast Android TTS" else "Quality OpenAI TTS"
-            Toast.makeText(this, "Switched to: $mode", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "TTS: $mode", Toast.LENGTH_SHORT).show()
             true
+        }
+        
+        // Double tap compare button to toggle STT mode
+        var lastCompareClickTime = 0L
+        binding.compareButton.setOnClickListener {
+            val currentTime = System.currentTimeMillis()
+            if (currentTime - lastCompareClickTime < 500) {
+                // Double click detected - toggle STT mode
+                if (localWhisperService.isReady()) {
+                    useLocalWhisper = !useLocalWhisper
+                    updateSttModeIndicator()
+                    val mode = if (useLocalWhisper) "Local Whisper (Offline)" else "Cloud Whisper (API)"
+                    Toast.makeText(this, "STT: $mode", Toast.LENGTH_SHORT).show()
+                } else {
+                    Toast.makeText(this, "Local Whisper not available. Download model first.", Toast.LENGTH_LONG).show()
+                }
+            } else {
+                // Single click - compare transcription
+                compareTranscription()
+            }
+            lastCompareClickTime = currentTime
         }
         
         // Clear previous recordings on app start
@@ -94,8 +137,18 @@ class MainActivity : AppCompatActivity() {
     private fun updateTtsModeButton() {
         val emoji = if (useFastTts) "⚡" else "⭐"
         val currentText = binding.recordButton.text.toString()
-        val baseText = currentText.replace("⚡ ", "").replace("⭐ ", "")
+        val baseText = currentText.replace("⚡ ", "").replace("⭐ ", "").replace("📱 ", "").replace("☁️ ", "")
         binding.recordButton.text = "$emoji $baseText"
+    }
+    
+    private fun updateSttModeIndicator() {
+        val sttEmoji = if (useLocalWhisper && localWhisperService.isReady()) "📱" else "☁️"
+        val status = if (useLocalWhisper && localWhisperService.isReady()) {
+            "STT: Local (Offline)"
+        } else {
+            "STT: Cloud (Online)"
+        }
+        binding.statusText.text = status
     }
     
     private fun compareTranscription() {
@@ -312,14 +365,29 @@ class MainActivity : AppCompatActivity() {
     private fun transcribeAudio(audioFile: File) {
         lifecycleScope.launch {
             try {
-                val transcription = withContext(Dispatchers.IO) {
-                    transcriptionService.transcribeAudio(audioFile)
+                val startTime = System.currentTimeMillis()
+                
+                val transcription = if (useLocalWhisper && localWhisperService.isReady()) {
+                    // Use local Whisper (offline, faster)
+                    binding.statusText.text = "Transcribing locally..."
+                    withContext(Dispatchers.IO) {
+                        localWhisperService.transcribe(audioFile, language = "hu")
+                    }
+                } else {
+                    // Use cloud Whisper (OpenAI API)
+                    binding.statusText.text = "Transcribing via cloud..."
+                    withContext(Dispatchers.IO) {
+                        transcriptionService.transcribeAudio(audioFile)
+                    }
                 }
+                
+                val elapsedTime = (System.currentTimeMillis() - startTime) / 1000.0
                 
                 withContext(Dispatchers.Main) {
                     if (transcription.isNotEmpty()) {
                         binding.transcriptionText.text = transcription
-                        binding.statusText.text = "Transcription completed"
+                        val mode = if (useLocalWhisper && localWhisperService.isReady()) "Local" else "Cloud"
+                        binding.statusText.text = "Transcription completed ($mode, ${elapsedTime}s)"
                         
                         // Generate TTS response
                         generateAndPlayTtsResponse(transcription)
@@ -450,5 +518,6 @@ class MainActivity : AppCompatActivity() {
         mediaRecorder?.release()
         mediaPlayer?.release()
         androidTtsService.shutdown()
+        localWhisperService.release()
     }
 }
