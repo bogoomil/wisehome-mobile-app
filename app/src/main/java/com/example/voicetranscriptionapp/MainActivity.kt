@@ -525,18 +525,26 @@ class MainActivity : AppCompatActivity() {
         
         val modelsStatus = models.map { model ->
             val downloaded = modelDownloader.isModelDownloaded(model)
-            val status = if (downloaded) "✓" else "⬇"
-            "$status ${model.name} (${model.sizeInMB} MB) - ${model.description}"
+            val status = if (downloaded) "✓ Downloaded" else "📥 Available"
+            "$status: ${model.name} (${model.sizeInMB} MB)\n    ${model.description}"
         }.toTypedArray()
         
+        val availableStorage = modelDownloader.getAvailableStorageSpaceMB()
+        
         val dialog = android.app.AlertDialog.Builder(this)
-            .setTitle("Whisper Model Manager")
-            .setMessage("Available storage: ${modelDownloader.getAvailableStorageSpaceMB()} MB\n\nLong press to download/delete")
+            .setTitle("Model Manager - Storage: ${availableStorage} MB free")
             .setItems(modelsStatus) { _, which ->
                 val selectedModel = models[which]
                 handleModelSelection(selectedModel, modelDownloader)
             }
             .setNegativeButton("Close", null)
+            .setPositiveButton("Help") { _, _ ->
+                android.app.AlertDialog.Builder(this)
+                    .setTitle("How to use")
+                    .setMessage("1. Tap a model to download/delete\n2. Recommended: TINY (75 MB) for testing\n3. After download, use double-tap Compare to toggle Local/Cloud STT")
+                    .setPositiveButton("OK", null)
+                    .show()
+            }
             .create()
         
         dialog.show()
