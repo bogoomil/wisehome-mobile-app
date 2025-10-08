@@ -32,7 +32,7 @@ class WakeWordService : Service() {
         
         // Porcupine Access Key - Replace with your key from Picovoice Console
         // Sign up at: https://console.picovoice.ai/
-        private const val ACCESS_KEY = "YOUR_PORCUPINE_ACCESS_KEY_HERE"
+        private const val ACCESS_KEY = "Ny7lT/X2ShyBr+hBeX73ZgR011aPFU28wldFUdA1C34tZ4SMqKB65w=="
         
         // Available built-in wake words:
         // "alexa", "americano", "blueberry", "bumblebee", "computer",
@@ -103,7 +103,8 @@ class WakeWordService : Service() {
             // Porcupine.BuiltInKeyword.JARVIS, etc.
             porcupineManager = PorcupineManager.Builder()
                 .setAccessKey(ACCESS_KEY)
-                .setKeyword(Porcupine.BuiltInKeyword.PORCUPINE) // Change wake word here
+//                .setKeyword("Ébresztő al") // Change wake word here
+                .setKeyword(Porcupine.BuiltInKeyword.BLUEBERRY) // Change wake word here
                 .build(applicationContext, callback)
             
             porcupineManager?.start()
