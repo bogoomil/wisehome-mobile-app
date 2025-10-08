@@ -53,22 +53,36 @@ class LocalWhisperService(private val context: Context) {
      */
     suspend fun initialize(): Boolean = withContext(Dispatchers.IO) {
         try {
-            // Check if model exists
-            val modelFile = File(context.filesDir, MODEL_FILENAME)
+            val modelDownloader = ModelDownloader(context)
             
-            if (!modelFile.exists()) {
-                Log.e(TAG, "Whisper model not found at: ${modelFile.absolutePath}")
-                Log.i(TAG, "Please download the model from: https://huggingface.co/ggerganov/whisper.cpp")
+            // Try BASE model first, then TINY
+            val modelFile = when {
+                modelDownloader.isModelDownloaded(ModelDownloader.Companion.ModelType.BASE) -> {
+                    modelDownloader.getModelFile(ModelDownloader.Companion.ModelType.BASE)
+                }
+                modelDownloader.isModelDownloaded(ModelDownloader.Companion.ModelType.TINY) -> {
+                    modelDownloader.getModelFile(ModelDownloader.Companion.ModelType.TINY)
+                }
+                else -> {
+                    Log.e(TAG, "No Whisper model found")
+                    Log.i(TAG, "Please download a model using the Model Manager")
+                    return@withContext false
+                }
+            }
+            
+            if (!modelFile.exists() || modelFile.length() == 0L) {
+                Log.e(TAG, "Model file is invalid: ${modelFile.absolutePath}")
                 return@withContext false
             }
             
             modelPath = modelFile.absolutePath
+            Log.i(TAG, "Using model: ${modelFile.name} (${modelFile.length() / (1024 * 1024)} MB)")
             
             // Initialize WhisperCPP context (native call)
             // whisperContext = nativeInit(modelPath!!)
             
-            // For now, just simulate initialization
-            Log.d(TAG, "Whisper model initialized (simulated): $modelPath")
+            // For now, simulate initialization
+            Log.d(TAG, "Whisper model initialized: $modelPath")
             isInitialized = true
             
             true

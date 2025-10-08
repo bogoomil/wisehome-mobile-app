@@ -318,8 +318,15 @@ Várható összes idő: 6-11s
 ### Jelenlegi állapot:
 
 ```kotlin
+// ModelDownloader.kt
+// - ✅ Model download from HuggingFace
+// - ✅ Progress tracking
+// - ✅ Storage management
+// - ✅ Multiple model support (TINY, BASE, SMALL, MEDIUM)
+
 // LocalWhisperService.kt
 // - ✅ Wrapper class kész
+// - ✅ Auto-detect downloaded models
 // - ✅ Initialize, transcribe, release methods
 // - ⚠️ Native binding még nincs implementálva
 // - ⚠️ Audio preprocessing placeholder
@@ -329,6 +336,8 @@ Várható összes idő: 6-11s
 // - ✅ UI indicators
 // - ✅ Fallback logic
 // - ✅ Performance timing
+// - ✅ Model Manager UI
+// - ✅ Download progress dialog
 ```
 
 ### Következő lépések (production):

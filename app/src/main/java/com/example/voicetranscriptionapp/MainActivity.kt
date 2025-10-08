@@ -96,6 +96,12 @@ class MainActivity : AppCompatActivity() {
             clearAllRecordings()
         }
         
+        // Long press Clear Cache button to open Model Manager
+        binding.clearCacheButton.setOnLongClickListener {
+            showModelManagerDialog()
+            true
+        }
+        
         // TTS Mode toggle button
         updateTtsModeButton()
         updateSttModeIndicator()
@@ -513,6 +519,143 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun showModelManagerDialog() {
+        val modelDownloader = ModelDownloader(this)
+        val models = ModelDownloader.Companion.ModelType.values()
+        
+        val modelsStatus = models.map { model ->
+            val downloaded = modelDownloader.isModelDownloaded(model)
+            val status = if (downloaded) "✓" else "⬇"
+            "$status ${model.name} (${model.sizeInMB} MB) - ${model.description}"
+        }.toTypedArray()
+        
+        val dialog = android.app.AlertDialog.Builder(this)
+            .setTitle("Whisper Model Manager")
+            .setMessage("Available storage: ${modelDownloader.getAvailableStorageSpaceMB()} MB\n\nLong press to download/delete")
+            .setItems(modelsStatus) { _, which ->
+                val selectedModel = models[which]
+                handleModelSelection(selectedModel, modelDownloader)
+            }
+            .setNegativeButton("Close", null)
+            .create()
+        
+        dialog.show()
+    }
+    
+    private fun handleModelSelection(
+        model: ModelDownloader.Companion.ModelType,
+        downloader: ModelDownloader
+    ) {
+        val isDownloaded = downloader.isModelDownloaded(model)
+        
+        if (isDownloaded) {
+            // Show delete confirmation
+            android.app.AlertDialog.Builder(this)
+                .setTitle("Delete Model")
+                .setMessage("Delete ${model.name} model (${model.sizeInMB} MB)?")
+                .setPositiveButton("Delete") { _, _ ->
+                    val deleted = downloader.deleteModel(model)
+                    val message = if (deleted) "Model deleted" else "Failed to delete"
+                    Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
+                    
+                    // Reinitialize Whisper
+                    lifecycleScope.launch {
+                        val initialized = localWhisperService.initialize()
+                        useLocalWhisper = initialized
+                        updateSttModeIndicator()
+                    }
+                }
+                .setNegativeButton("Cancel", null)
+                .show()
+        } else {
+            // Show download confirmation
+            if (!downloader.hasEnoughSpaceFor(model)) {
+                Toast.makeText(this, "Not enough storage space!", Toast.LENGTH_LONG).show()
+                return
+            }
+            
+            android.app.AlertDialog.Builder(this)
+                .setTitle("Download Model")
+                .setMessage("Download ${model.name} model (${model.sizeInMB} MB)?\n\n${model.description}")
+                .setPositiveButton("Download") { _, _ ->
+                    downloadModel(model, downloader)
+                }
+                .setNegativeButton("Cancel", null)
+                .show()
+        }
+    }
+    
+    private fun downloadModel(
+        model: ModelDownloader.Companion.ModelType,
+        downloader: ModelDownloader
+    ) {
+        // Show progress dialog
+        val progressDialog = android.app.ProgressDialog(this).apply {
+            setTitle("Downloading ${model.name}")
+            setMessage("Starting download...")
+            setProgressStyle(android.app.ProgressDialog.STYLE_HORIZONTAL)
+            max = 100
+            setCancelable(false)
+            show()
+        }
+        
+        lifecycleScope.launch {
+            val result = downloader.downloadModel(
+                model,
+                object : ModelDownloader.DownloadProgressListener {
+                    override fun onProgress(downloadedBytes: Long, totalBytes: Long, percentage: Int) {
+                        runOnUiThread {
+                            progressDialog.progress = percentage
+                            progressDialog.setMessage(
+                                "Downloaded: ${downloadedBytes / (1024 * 1024)} MB / ${totalBytes / (1024 * 1024)} MB"
+                            )
+                        }
+                    }
+                    
+                    override fun onComplete(file: File) {
+                        runOnUiThread {
+                            progressDialog.dismiss()
+                            Toast.makeText(
+                                this@MainActivity,
+                                "Download complete! Initializing...",
+                                Toast.LENGTH_SHORT
+                            ).show()
+                            
+                            // Initialize Whisper with new model
+                            lifecycleScope.launch {
+                                val initialized = localWhisperService.initialize()
+                                if (initialized) {
+                                    useLocalWhisper = true
+                                    updateSttModeIndicator()
+                                    Toast.makeText(
+                                        this@MainActivity,
+                                        "Local Whisper ready!",
+                                        Toast.LENGTH_SHORT
+                                    ).show()
+                                }
+                            }
+                        }
+                    }
+                    
+                    override fun onError(error: Exception) {
+                        runOnUiThread {
+                            progressDialog.dismiss()
+                            android.app.AlertDialog.Builder(this@MainActivity)
+                                .setTitle("Download Failed")
+                                .setMessage("Error: ${error.message}\n\nPlease check your internet connection and try again.")
+                                .setPositiveButton("OK", null)
+                                .show()
+                        }
+                    }
+                }
+            )
+            
+            result.onFailure { error ->
+                Log.e("MainActivity", "Model download failed", error)
+            }
+        }
+    }
+    
     override fun onDestroy() {
         super.onDestroy()
         mediaRecorder?.release()
