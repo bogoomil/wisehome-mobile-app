@@ -492,11 +492,11 @@ class MainActivity : AppCompatActivity() {
         WakeWordService.startService(this)
         isWakeWordListening = true
         
-        binding.recordButton.text = "🎤 Listening for 'Blueberry'"
+        binding.recordButton.text = "🎤 Listening for 'Hello Al'"
         binding.recordButton.setBackgroundColor(getColor(android.R.color.holo_green_light))
-        binding.statusText.text = "Wake word mode active. Say 'Blueberry' to start recording."
+        binding.statusText.text = "Wake word mode active. Say 'Hello Al' to start recording."
         
-        Toast.makeText(this, "Wake Word Mode Started\nSay 'Blueberry' to trigger recording", Toast.LENGTH_LONG).show()
+        Toast.makeText(this, "Wake Word Mode Started\nSay 'Hello Al' to trigger recording", Toast.LENGTH_LONG).show()
         Log.i("MainActivity", "Wake word listening started")
     }
     
@@ -562,7 +562,7 @@ class MainActivity : AppCompatActivity() {
                 withContext(Dispatchers.Main) {
                     if (isWakeWordListening) {
                         binding.recordButton.setBackgroundColor(getColor(android.R.color.holo_green_light))
-                        binding.statusText.text = "🎤 Listening for 'Blueberry'..."
+                        binding.statusText.text = "🎤 Listening for 'Hello Al'..."
                     }
                 }
                 

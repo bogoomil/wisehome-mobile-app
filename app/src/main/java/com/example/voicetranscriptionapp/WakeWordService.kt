@@ -30,9 +30,9 @@ class WakeWordService : Service() {
         private const val NOTIFICATION_ID = 1001
         private const val CHANNEL_ID = "WakeWordServiceChannel"
         
-        // Porcupine Access Key - Replace with your key from Picovoice Console
+        // Porcupine Access Key from BuildConfig
         // Sign up at: https://console.picovoice.ai/
-        private const val ACCESS_KEY = "Ny7lT/X2ShyBr+hBeX73ZgR011aPFU28wldFUdA1C34tZ4SMqKB65w=="
+        private val ACCESS_KEY = BuildConfig.PICOVOICE_ACCESS_KEY
         
         // Available built-in wake words:
         // "alexa", "americano", "blueberry", "bumblebee", "computer",
@@ -98,20 +98,18 @@ class WakeWordService : Service() {
                 onWakeWordDetected(keywordIndex)
             }
             
-            // Built-in wake words - using "porcupine" as default
-            // You can change this to: Porcupine.BuiltInKeyword.COMPUTER, 
-            // Porcupine.BuiltInKeyword.JARVIS, etc.
+            // Custom wake word - "Hello Al"
+            // Using custom keyword model from assets folder
             porcupineManager = PorcupineManager.Builder()
                 .setAccessKey(ACCESS_KEY)
-//                .setKeyword("Ébresztő al") // Change wake word here
-                .setKeyword(Porcupine.BuiltInKeyword.BLUEBERRY) // Change wake word here
+                .setKeywordPath("Hello-Al_en_android_v3_0_0.ppn")
                 .build(applicationContext, callback)
             
             porcupineManager?.start()
             isListening = true
             
             Log.i(TAG, "Wake word detection started")
-            updateNotification("🎤 Listening... Say 'Porcupine'")
+            updateNotification("🎤 Listening... Say 'Hello Al'")
             
         } catch (e: PorcupineException) {
             Log.e(TAG, "Failed to initialize Porcupine", e)
@@ -158,7 +156,7 @@ class WakeWordService : Service() {
         // After a short delay, return to listening state
         android.os.Handler(mainLooper).postDelayed({
             if (isListening) {
-                updateNotification("🎤 Listening... Say 'Porcupine'")
+                updateNotification("🎤 Listening... Say 'Hello Al'")
             }
         }, 3000)
     }

@@ -1,0 +1,16 @@
+## This file must *NOT* be checked into Version Control Systems,
+# as it contains information specific to your local configuration.
+#
+# Location of the SDK. This is only used by Gradle.
+# For customization when using a Version Control System, please read the
+# header note.
+
+sdk.dir=/path/to/your/Android/Sdk
+
+# API Keys - DO NOT COMMIT!
+# Get your OpenAI API key from: https://platform.openai.com/api-keys
+OPENAI_API_KEY=your_openai_api_key_here
+
+# Get your Picovoice Access Key from: https://console.picovoice.ai/
+PICOVOICE_ACCESS_KEY=your_picovoice_access_key_here
+
