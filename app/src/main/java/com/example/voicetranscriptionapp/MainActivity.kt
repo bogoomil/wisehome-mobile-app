@@ -1,9 +1,14 @@
 package com.example.voicetranscriptionapp
 
 import android.Manifest
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.media.MediaPlayer
 import android.media.MediaRecorder
+import android.os.Build
 import android.os.Bundle
 import android.os.Environment
 import android.util.Log
@@ -14,6 +19,7 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import com.example.voicetranscriptionapp.databinding.ActivityMainBinding
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -30,6 +36,19 @@ class MainActivity : AppCompatActivity() {
     private var mediaPlayer: MediaPlayer? = null
     private var recordingStartTime: Long = 0
     private var useFastTts = true // Toggle between Android TTS (fast) and OpenAI TTS (quality)
+    private var isWakeWordListening = false
+    private var isAutoRecording = false
+    
+    // BroadcastReceiver for wake word detection
+    private val wakeWordReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            when (intent?.action) {
+                WakeWordService.ACTION_WAKE_WORD_DETECTED -> {
+                    onWakeWordDetected()
+                }
+            }
+        }
+    }
 
     private val requestPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -54,6 +73,14 @@ class MainActivity : AppCompatActivity() {
         androidTtsService.initialize {
             Log.d("MainActivity", "Android TTS ready")
         }
+        
+        // Register wake word broadcast receiver
+        val filter = IntentFilter(WakeWordService.ACTION_WAKE_WORD_DETECTED)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(wakeWordReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
+        } else {
+            registerReceiver(wakeWordReceiver, filter)
+        }
 
         setupUI()
         checkPermission()
@@ -76,16 +103,14 @@ class MainActivity : AppCompatActivity() {
             clearAllRecordings()
         }
         
-        // TTS Mode toggle button
-        updateTtsModeButton()
+        // Long press Record button to toggle Wake Word mode
         binding.recordButton.setOnLongClickListener {
-            // Long press to toggle TTS mode
-            useFastTts = !useFastTts
-            updateTtsModeButton()
-            val mode = if (useFastTts) "Fast Android TTS" else "Quality OpenAI TTS"
-            Toast.makeText(this, "Switched to: $mode", Toast.LENGTH_SHORT).show()
+            toggleWakeWordMode()
             true
         }
+        
+        // TTS Mode toggle - double tap Compare button
+        updateTtsModeButton()
         
         // Clear previous recordings on app start
         clearOldRecordings()
@@ -445,8 +470,123 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun toggleWakeWordMode() {
+        if (isWakeWordListening) {
+            stopWakeWordListening()
+        } else {
+            startWakeWordListening()
+        }
+    }
+    
+    private fun startWakeWordListening() {
+        // Check notification permission on Android 13+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) 
+                != PackageManager.PERMISSION_GRANTED) {
+                Toast.makeText(this, "Please grant notification permission first", Toast.LENGTH_LONG).show()
+                requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 101)
+                return
+            }
+        }
+        
+        WakeWordService.startService(this)
+        isWakeWordListening = true
+        
+        binding.recordButton.text = "🎤 Listening for 'Hello Al'"
+        binding.recordButton.setBackgroundColor(getColor(android.R.color.holo_green_light))
+        binding.statusText.text = "Wake word mode active. Say 'Hello Al' to start recording."
+        
+        Toast.makeText(this, "Wake Word Mode Started\nSay 'Hello Al' to trigger recording", Toast.LENGTH_LONG).show()
+        Log.i("MainActivity", "Wake word listening started")
+    }
+    
+    private fun stopWakeWordListening() {
+        WakeWordService.stopService(this)
+        isWakeWordListening = false
+        
+        binding.recordButton.text = getString(R.string.record_button)
+        binding.recordButton.setBackgroundColor(getColor(R.color.record_button))
+        binding.statusText.text = "Wake word mode stopped. Press button to record manually."
+        
+        Toast.makeText(this, "Wake Word Mode Stopped", Toast.LENGTH_SHORT).show()
+        Log.i("MainActivity", "Wake word listening stopped")
+    }
+    
+    private fun onWakeWordDetected() {
+        Log.i("MainActivity", "🎯 Wake word detected in MainActivity!")
+        
+        // Visual feedback
+        runOnUiThread {
+            binding.statusText.text = "✅ Wake word detected! Starting auto-recording..."
+            binding.recordButton.setBackgroundColor(getColor(android.R.color.holo_orange_dark))
+            
+            // Haptic feedback
+            @Suppress("DEPRECATION")
+            binding.recordButton.performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
+        }
+        
+        // Start auto-recording
+        startAutoRecording()
+    }
+    
+    private fun startAutoRecording() {
+        if (isAutoRecording || isRecording) {
+            Log.w("MainActivity", "Already recording, ignoring wake word")
+            return
+        }
+        
+        isAutoRecording = true
+        
+        lifecycleScope.launch {
+            try {
+                // Start recording
+                withContext(Dispatchers.Main) {
+                    startRecording()
+                }
+                
+                // Auto-stop after 5 seconds
+                delay(5000)
+                
+                withContext(Dispatchers.Main) {
+                    if (isRecording) {
+                        stopRecording()
+                    }
+                }
+                
+                // Wait a bit before allowing next wake word detection
+                delay(1000)
+                
+                isAutoRecording = false
+                
+                // Return to listening mode
+                withContext(Dispatchers.Main) {
+                    if (isWakeWordListening) {
+                        binding.recordButton.setBackgroundColor(getColor(android.R.color.holo_green_light))
+                        binding.statusText.text = "🎤 Listening for 'Hello Al'..."
+                    }
+                }
+                
+            } catch (e: Exception) {
+                Log.e("MainActivity", "Auto-recording failed", e)
+                isAutoRecording = false
+            }
+        }
+    }
+    
     override fun onDestroy() {
         super.onDestroy()
+        
+        try {
+            unregisterReceiver(wakeWordReceiver)
+        } catch (e: Exception) {
+            Log.e("MainActivity", "Error unregistering receiver", e)
+        }
+        
+        // Stop wake word service if running
+        if (isWakeWordListening) {
+            WakeWordService.stopService(this)
+        }
+        
         mediaRecorder?.release()
         mediaPlayer?.release()
         androidTtsService.shutdown()

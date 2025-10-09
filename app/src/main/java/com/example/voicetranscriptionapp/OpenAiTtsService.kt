@@ -10,8 +10,7 @@ import java.io.IOException
 
 class OpenAiTtsService {
     private val client = OkHttpClient()
-    // TODO: Add your OpenAI API key here or pass it via constructor
-    private val apiKey = "YOUR_OPENAI_API_KEY_HERE"
+    private val apiKey = BuildConfig.OPENAI_API_KEY
     private val apiUrl = "https://api.openai.com/v1/audio/speech"
 
     suspend fun textToSpeech(text: String, outputFile: File): Boolean {
