@@ -7,6 +7,7 @@ Ez az Android alkalmazás lehetővé teszi hangrögzítést és OpenAI Whisper A
 - 🎤 Hangrögzítés egy nyomógombbal
 - 🔊 Wake Word Detection - "Hello Al" ébresztőszó felismerés (Picovoice Porcupine)
 - 🤖 OpenAI Whisper API integráció transzkripció
+- 🧠 OpenAI Workflow integráció - AI agent válaszok (Agent Builder)
 - 🗣️ OpenAI TTS (Text-to-Speech) támogatás
 - 📝 Magyar nyelvű transzkripció
 - 🎨 Egyszerű és felhasználóbarát felület
@@ -18,6 +19,7 @@ Ez az Android alkalmazás lehetővé teszi hangrögzítést és OpenAI Whisper A
 - Android SDK 24+ (Android 7.0+)
 - Internet kapcsolat (OpenAI API hozzáféréshez)
 - OpenAI API kulcs ([regisztráció](https://platform.openai.com/api-keys))
+- OpenAI Workflow ID ([létrehozás](https://platform.openai.com/assistants))
 - Picovoice Access Key ([regisztráció](https://console.picovoice.ai/))
 
 ## API Kulcsok beállítása
@@ -36,6 +38,16 @@ cp local.properties.example local.properties
 3. Hozz létre egy új API kulcsot
 4. Másold ki a kulcsot
 
+**OpenAI Workflow ID:**
+1. Menj a [https://platform.openai.com/assistants](https://platform.openai.com/assistants) (vagy Agent Builder) oldalra
+2. Kattints a "+ Create Workflow" gombra
+3. Építsd fel a workflow-t:
+   - Input node: fogadja a felhasználó üzenetét
+   - LLM node: GPT feldolgozás (ajánlott: GPT-4)
+   - Output node: válasz visszaadása
+4. Adj nevet (pl. "Okosotthon Workflow")
+5. Mentés után másold ki a Workflow ID-t (formátum: `wf_...`)
+
 **Picovoice Access Key:**
 1. Menj a [https://console.picovoice.ai/](https://console.picovoice.ai/) oldalra
 2. Regisztrálj egy ingyenes fiókot
@@ -50,6 +62,7 @@ sdk.dir=/path/to/your/Android/Sdk
 
 # API Keys - DO NOT COMMIT!
 OPENAI_API_KEY=your_openai_api_key_here
+OPENAI_WORKFLOW_ID=wf_your_workflow_id_here
 PICOVOICE_ACCESS_KEY=your_picovoice_access_key_here
 ```
 
@@ -100,17 +113,26 @@ PICOVOICE_ACCESS_KEY=your_picovoice_access_key_here
 - Beszélj a mikrofonba
 - Nyomd meg a piros "Stop Recording" gombot a rögzítés leállításához
 
-### 4. Transzkripció
-- Az alkalmazás automatikusan elküldi a hangot az OpenAI API-nak
+### 4. Transzkripció és AI válasz
+- Az alkalmazás automatikusan elküldi a hangot az OpenAI Whisper API-nak
 - A transzkripció megjelenik a szövegmezőben
-- A válasz hang formában is lejátszható (TTS)
+- A transzkripciót elküldi az OpenAI AI-nak (GPT-4o-mini)
+- **AI válasz JSON formátumban:** `{"helyiseg": "nappali", "eszkoz": "lámpa", "parancs": "bekapcsol"}`
+- Az app parse-olja a JSON-t és természetes nyelven olvassa fel
+- Választható: gyors mód (Android TTS) vagy minőségi mód (OpenAI TTS)
+
+Példa:
+- **Bemenet:** "Kapcsold be a nappaliban a lámpát"
+- **AI JSON:** `{"helyiseg": "nappali", "eszkoz": "lámpa", "parancs": "bekapcsol"}`
+- **Felolvasás:** "Rendben, bekapcsolom a lámpa eszközt a nappaliban."
 
 ## Technikai részletek
 
 ### Audio & API
 - **Audio formátum**: M4A (AAC kodek)
 - **Transcription API**: OpenAI Whisper-1 modell
-- **TTS API**: OpenAI TTS-1 (Nova voice)
+- **Workflow API**: OpenAI Workflows (Agent Builder)
+- **TTS API**: OpenAI TTS-1 (Nova voice) + Android TTS
 - **Wake Word Engine**: Picovoice Porcupine v3.0
 - **Nyelv**: Magyar (hu)
 
@@ -191,6 +213,7 @@ mobilapp/
 │   │   ├── java/com/example/voicetranscriptionapp/
 │   │   │   ├── MainActivity.kt              # Fő UI és koordináció
 │   │   │   ├── TranscriptionService.kt     # OpenAI Whisper API
+│   │   │   ├── OpenAiWorkflowService.kt    # OpenAI Workflow API
 │   │   │   ├── OpenAiTtsService.kt         # OpenAI TTS API
 │   │   │   ├── WakeWordService.kt          # Porcupine wake word
 │   │   │   └── AndroidTtsService.kt        # Android beépített TTS
@@ -223,6 +246,9 @@ private val apiKey = BuildConfig.OPENAI_API_KEY
 ## Dokumentáció
 
 További részletek:
+- [WISEHOME_SERVER_INTEGRATION.md](WISEHOME_SERVER_INTEGRATION.md) - ⭐ Wisehome.hu szerver integráció
+- [JSON_COMMAND_SYSTEM.md](JSON_COMMAND_SYSTEM.md) - JSON parancs rendszer dokumentáció
+- [WORKFLOW_INTEGRATION.md](WORKFLOW_INTEGRATION.md) - OpenAI AI integráció részletesen
 - [WAKE_WORD_SETUP.md](WAKE_WORD_SETUP.md) - Wake word részletes beállítás
 - [QUICK_START_WAKE_WORD.md](QUICK_START_WAKE_WORD.md) - Gyors kezdés útmutató
 - [OPTIMIZATION_GUIDE.md](OPTIMIZATION_GUIDE.md) - Teljesítmény optimalizálás

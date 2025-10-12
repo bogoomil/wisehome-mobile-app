@@ -22,6 +22,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.json.JSONObject
 import java.io.File
 import java.io.IOException
 
@@ -33,6 +34,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var transcriptionService: TranscriptionService
     private lateinit var ttsService: OpenAiTtsService
     private lateinit var androidTtsService: AndroidTtsService
+    private lateinit var workflowService: OpenAiWorkflowService
     private var mediaPlayer: MediaPlayer? = null
     private var recordingStartTime: Long = 0
     private var useFastTts = true // Toggle between Android TTS (fast) and OpenAI TTS (quality)
@@ -68,6 +70,7 @@ class MainActivity : AppCompatActivity() {
         transcriptionService = TranscriptionService()
         ttsService = OpenAiTtsService()
         androidTtsService = AndroidTtsService(this)
+        workflowService = OpenAiWorkflowService()
         
         // Initialize Android TTS early for faster first use
         androidTtsService.initialize {
@@ -366,21 +369,46 @@ class MainActivity : AppCompatActivity() {
     private fun generateAndPlayTtsResponse(transcription: String) {
         lifecycleScope.launch {
             try {
-                // Create response text
-                val responseText = "A következő mondatot értettem meg: $transcription"
+                // Send transcription to OpenAI Workflow
+                binding.statusText.text = "AI elemzés folyamatban..."
                 
+                val workflowResponse = withContext(Dispatchers.IO) {
+                    workflowService.sendMessageToWorkflow(transcription)
+                }
+                
+                Log.d("MainActivity", "AI JSON response: $workflowResponse")
+                
+                if (workflowResponse.isEmpty() || workflowResponse.startsWith("Hiba")) {
+                    withContext(Dispatchers.Main) {
+                        binding.statusText.text = "AI hiba: $workflowResponse"
+                        Toast.makeText(this@MainActivity, workflowResponse, Toast.LENGTH_LONG).show()
+                    }
+                    return@launch
+                }
+                
+                // Parse JSON response
+                val (humanResponse, jsonData) = parseJsonResponse(workflowResponse)
+                
+                // Update UI with parsed data
+                withContext(Dispatchers.Main) {
+                    binding.statusText.text = "Parancs: ${jsonData["helyiseg"]} - ${jsonData["eszkoz"]} - ${jsonData["parancs"]}"
+                }
+                
+                Log.d("MainActivity", "Human response: $humanResponse")
+                
+                // Now read the human-friendly response using TTS
                 if (useFastTts) {
                     // Fast mode: Android TTS (instant)
-                    binding.statusText.text = "Playing response (fast mode)..."
+                    binding.statusText.text = "Válasz lejátszása (gyors mód)..."
                     
                     withContext(Dispatchers.Main) {
-                        androidTtsService.speak(responseText) {
-                            binding.statusText.text = "Response completed"
+                        androidTtsService.speak(humanResponse) {
+                            binding.statusText.text = "Parancs végrehajtva: ${jsonData["helyiseg"]} - ${jsonData["eszkoz"]}"
                         }
                     }
                 } else {
                     // Quality mode: OpenAI TTS
-                    binding.statusText.text = "Generating speech response (quality mode)..."
+                    binding.statusText.text = "Beszéd generálása (minőségi mód)..."
                     
                     // Create output file for TTS audio
                     val ttsDir = File(getExternalFilesDir(Environment.DIRECTORY_MUSIC), "TtsAudio")
@@ -391,26 +419,64 @@ class MainActivity : AppCompatActivity() {
                     
                     // Generate TTS audio
                     val success = withContext(Dispatchers.IO) {
-                        ttsService.textToSpeech(responseText, ttsFile)
+                        ttsService.textToSpeech(humanResponse, ttsFile)
                     }
                     
                     withContext(Dispatchers.Main) {
                         if (success && ttsFile.exists()) {
-                            binding.statusText.text = "Playing response..."
+                            binding.statusText.text = "Válasz lejátszása..."
                             playAudio(ttsFile)
                         } else {
-                            binding.statusText.text = "Failed to generate speech"
-                            Toast.makeText(this@MainActivity, "Failed to generate speech", Toast.LENGTH_SHORT).show()
+                            binding.statusText.text = "Beszéd generálás sikertelen"
+                            Toast.makeText(this@MainActivity, "Beszéd generálás sikertelen", Toast.LENGTH_SHORT).show()
                         }
                     }
                 }
             } catch (e: Exception) {
-                Log.e("MainActivity", "TTS generation failed", e)
+                Log.e("MainActivity", "Workflow vagy TTS hiba", e)
                 withContext(Dispatchers.Main) {
-                    binding.statusText.text = "Speech generation failed"
-                    Toast.makeText(this@MainActivity, "Speech generation failed", Toast.LENGTH_SHORT).show()
+                    binding.statusText.text = "Hiba: ${e.message}"
+                    Toast.makeText(this@MainActivity, "Hiba történt: ${e.message}", Toast.LENGTH_SHORT).show()
                 }
             }
+        }
+    }
+    
+    private fun parseJsonResponse(jsonResponse: String): Pair<String, Map<String, String>> {
+        return try {
+            val json = JSONObject(jsonResponse)
+            // A szerver ékezettel küldi a mezőket
+            val helyiseg = json.optString("helyiség", "ismeretlen")
+            val eszkoz = json.optString("eszköz", "ismeretlen")
+            val parancs = json.optString("parancs", "ismeretlen")
+            
+            Log.d("MainActivity", "Parsed - Helyiség: $helyiseg, Eszköz: $eszkoz, Parancs: $parancs")
+            
+            // Create human-friendly response
+            val humanResponse = when {
+                parancs == "bekapcsol" -> "Rendben, bekapcsolom a $eszkoz eszközt a ${helyiseg}ban."
+                parancs == "kikapcsol" -> "Rendben, kikapcsolom a $eszkoz eszközt a ${helyiseg}ban."
+                parancs.contains("fok") -> "Rendben, beállítom a $eszkoz eszközt $parancs értékre a ${helyiseg}ban."
+                parancs == "kinyit" -> "Rendben, kinyitom a $eszkoz eszközt a ${helyiseg}ban."
+                parancs == "bezár" -> "Rendben, bezárom a $eszkoz eszközt a ${helyiseg}ban."
+                parancs == "ismeretlen" -> "Sajnos nem értettem a parancsot. Kérlek próbáld újra."
+                else -> "Rendben, $parancs parancsot végrehajtom a $eszkoz eszközön a ${helyiseg}ban."
+            }
+            
+            val dataMap = mapOf(
+                "helyiseg" to helyiseg,
+                "eszkoz" to eszkoz,
+                "parancs" to parancs
+            )
+            
+            Pair(humanResponse, dataMap)
+        } catch (e: Exception) {
+            Log.e("MainActivity", "Error parsing JSON response", e)
+            Pair("Nem sikerült értelmezni a választ.", mapOf(
+                "helyiseg" to "hiba",
+                "eszkoz" to "hiba",
+                "parancs" to "hiba"
+            ))
         }
     }
     

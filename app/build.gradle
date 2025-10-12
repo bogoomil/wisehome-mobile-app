@@ -25,6 +25,7 @@ android {
         
         // Add API keys to BuildConfig
         buildConfigField "String", "OPENAI_API_KEY", "\"${localProperties.getProperty('OPENAI_API_KEY', '')}\""
+        buildConfigField "String", "OPENAI_WORKFLOW_ID", "\"${localProperties.getProperty('OPENAI_WORKFLOW_ID', '')}\""
         buildConfigField "String", "PICOVOICE_ACCESS_KEY", "\"${localProperties.getProperty('PICOVOICE_ACCESS_KEY', '')}\""
     }
 

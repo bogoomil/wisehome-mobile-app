@@ -11,6 +11,10 @@ sdk.dir=/path/to/your/Android/Sdk
 # Get your OpenAI API key from: https://platform.openai.com/api-keys
 OPENAI_API_KEY=your_openai_api_key_here
 
+# Get your OpenAI Workflow ID from: https://platform.openai.com/assistants
+# Create a workflow using Agent Builder, then copy its ID (starts with "wf_")
+OPENAI_WORKFLOW_ID=your_workflow_id_here
+
 # Get your Picovoice Access Key from: https://console.picovoice.ai/
 PICOVOICE_ACCESS_KEY=your_picovoice_access_key_here
 
