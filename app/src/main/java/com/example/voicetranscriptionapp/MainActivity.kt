@@ -391,7 +391,7 @@ class MainActivity : AppCompatActivity() {
                 
                 // Update UI with parsed data
                 withContext(Dispatchers.Main) {
-                    binding.statusText.text = "Parancs: ${jsonData["helyiseg"]} - ${jsonData["eszkoz"]} - ${jsonData["parancs"]}"
+                    binding.statusText.text = "Command: ${jsonData["room"]} - ${jsonData["device"]} - ${jsonData["command"]}"
                 }
                 
                 Log.d("MainActivity", "Human response: $humanResponse")
@@ -403,7 +403,7 @@ class MainActivity : AppCompatActivity() {
                     
                     withContext(Dispatchers.Main) {
                         androidTtsService.speak(humanResponse) {
-                            binding.statusText.text = "Parancs végrehajtva: ${jsonData["helyiseg"]} - ${jsonData["eszkoz"]}"
+                            binding.statusText.text = "Command executed: ${jsonData["room"]} - ${jsonData["device"]}"
                         }
                     }
                 } else {
@@ -445,37 +445,37 @@ class MainActivity : AppCompatActivity() {
     private fun parseJsonResponse(jsonResponse: String): Pair<String, Map<String, String>> {
         return try {
             val json = JSONObject(jsonResponse)
-            // A szerver ékezettel küldi a mezőket
-            val helyiseg = json.optString("helyiség", "ismeretlen")
-            val eszkoz = json.optString("eszköz", "ismeretlen")
-            val parancs = json.optString("parancs", "ismeretlen")
+            // A szerver angol mezőneveket küld
+            val room = json.optString("room", "unknown")
+            val device = json.optString("device", "unknown")
+            val command = json.optString("command", "unknown")
             
-            Log.d("MainActivity", "Parsed - Helyiség: $helyiseg, Eszköz: $eszkoz, Parancs: $parancs")
+            Log.d("MainActivity", "Parsed - Room: $room, Device: $device, Command: $command")
             
-            // Create human-friendly response
+            // Create human-friendly response in Hungarian
             val humanResponse = when {
-                parancs == "bekapcsol" -> "Rendben, bekapcsolom a $eszkoz eszközt a ${helyiseg}ban."
-                parancs == "kikapcsol" -> "Rendben, kikapcsolom a $eszkoz eszközt a ${helyiseg}ban."
-                parancs.contains("fok") -> "Rendben, beállítom a $eszkoz eszközt $parancs értékre a ${helyiseg}ban."
-                parancs == "kinyit" -> "Rendben, kinyitom a $eszkoz eszközt a ${helyiseg}ban."
-                parancs == "bezár" -> "Rendben, bezárom a $eszkoz eszközt a ${helyiseg}ban."
-                parancs == "ismeretlen" -> "Sajnos nem értettem a parancsot. Kérlek próbáld újra."
-                else -> "Rendben, $parancs parancsot végrehajtom a $eszkoz eszközön a ${helyiseg}ban."
+                command.contains("turn on", ignoreCase = true) -> "Rendben, bekapcsolom a $device eszközt a ${room}ban."
+                command.contains("turn off", ignoreCase = true) -> "Rendben, kikapcsolom a $device eszközt a ${room}ban."
+                command.contains("set", ignoreCase = true) || command.contains("degrees") -> "Rendben, beállítom a $device eszközt a ${room}ban. $command"
+                command.contains("open", ignoreCase = true) -> "Rendben, kinyitom a $device eszközt a ${room}ban."
+                command.contains("close", ignoreCase = true) -> "Rendben, bezárom a $device eszközt a ${room}ban."
+                command == "unknown" -> "Sajnos nem értettem a parancsot. Kérlek próbáld újra."
+                else -> "Rendben, $command parancsot végrehajtom a $device eszközön a ${room}ban."
             }
             
             val dataMap = mapOf(
-                "helyiseg" to helyiseg,
-                "eszkoz" to eszkoz,
-                "parancs" to parancs
+                "room" to room,
+                "device" to device,
+                "command" to command
             )
             
             Pair(humanResponse, dataMap)
         } catch (e: Exception) {
             Log.e("MainActivity", "Error parsing JSON response", e)
             Pair("Nem sikerült értelmezni a választ.", mapOf(
-                "helyiseg" to "hiba",
-                "eszkoz" to "hiba",
-                "parancs" to "hiba"
+                "room" to "error",
+                "device" to "error",
+                "command" to "error"
             ))
         }
     }
