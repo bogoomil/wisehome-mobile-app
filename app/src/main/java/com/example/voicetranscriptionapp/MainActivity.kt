@@ -452,16 +452,8 @@ class MainActivity : AppCompatActivity() {
             
             Log.d("MainActivity", "Parsed - Room: $room, Device: $device, Command: $command")
             
-            // Create human-friendly response in Hungarian
-            val humanResponse = when {
-                command.contains("turn on", ignoreCase = true) -> "Rendben, bekapcsolom a $device eszközt a ${room}ban."
-                command.contains("turn off", ignoreCase = true) -> "Rendben, kikapcsolom a $device eszközt a ${room}ban."
-                command.contains("set", ignoreCase = true) || command.contains("degrees") -> "Rendben, beállítom a $device eszközt a ${room}ban. $command"
-                command.contains("open", ignoreCase = true) -> "Rendben, kinyitom a $device eszközt a ${room}ban."
-                command.contains("close", ignoreCase = true) -> "Rendben, bezárom a $device eszközt a ${room}ban."
-                command == "unknown" -> "Sajnos nem értettem a parancsot. Kérlek próbáld újra."
-                else -> "Rendben, $command parancsot végrehajtom a $device eszközön a ${room}ban."
-            }
+            // Simple property-value format response
+            val humanResponse = "Room: $room. Device: $device. Command: $command."
             
             val dataMap = mapOf(
                 "room" to room,
