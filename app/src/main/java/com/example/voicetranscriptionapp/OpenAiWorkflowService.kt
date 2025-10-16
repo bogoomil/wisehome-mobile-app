@@ -13,15 +13,33 @@ class OpenAiWorkflowService {
 
     /**
      * Sends transcribed text to wisehome.hu server and gets JSON response
+     * 
+     * @param userMessage The transcribed user message
+     * @param previousContext Previous command context (room, device, command) if available
+     * @return Full server response as JSON string
      */
-    suspend fun sendMessageToWorkflow(userMessage: String): String {
+    suspend fun sendMessageToWorkflow(
+        userMessage: String, 
+        previousContext: Map<String, String>? = null
+    ): String {
         return try {
             Log.d("OpenAiWorkflow", "Sending to wisehome.hu server")
             Log.d("OpenAiWorkflow", "User message: $userMessage")
+            Log.d("OpenAiWorkflow", "Previous context: $previousContext")
             Log.d("OpenAiWorkflow", "Server URL: $serverUrl")
             
+            // Build enhanced message with context if available
+            val enhancedMessage = if (previousContext != null && previousContext.isNotEmpty()) {
+                val contextParts = previousContext.entries.joinToString(", ") { "${it.key}: ${it.value}" }
+                "Context: $contextParts. User said: $userMessage"
+            } else {
+                userMessage
+            }
+            
+            Log.d("OpenAiWorkflow", "Enhanced message: $enhancedMessage")
+            
             val jsonBody = JSONObject().apply {
-                put("text", userMessage)
+                put("text", enhancedMessage)
             }
             
             val requestBody = jsonBody.toString()
@@ -41,22 +59,8 @@ class OpenAiWorkflowService {
                 val responseBody = response.body?.string()
                 Log.d("OpenAiWorkflow", "Response received: $responseBody")
                 
-                val jsonResponse = JSONObject(responseBody ?: "")
-                val success = jsonResponse.optBoolean("success", false)
-                
-                if (success) {
-                    val result = jsonResponse.optJSONObject("result")
-                    if (result != null) {
-                        Log.d("OpenAiWorkflow", "Parsed result: $result")
-                        return result.toString()
-                    }
-                } else {
-                    val error = jsonResponse.optString("error", "Unknown error")
-                    Log.e("OpenAiWorkflow", "Server returned error: $error")
-                    return ""
-                }
-                
-                "Nem kaptam választ a szervertől."
+                // Return the full response (not just result) so we can check has_missing_info
+                return responseBody ?: ""
             } else {
                 val errorBody = response.body?.string()
                 Log.e("OpenAiWorkflow", "Server error: ${response.code} - ${response.message}")

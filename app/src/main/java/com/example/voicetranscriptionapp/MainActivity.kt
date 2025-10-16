@@ -41,6 +41,10 @@ class MainActivity : AppCompatActivity() {
     private var isWakeWordListening = false
     private var isAutoRecording = false
     
+    // Previous command context for multi-turn conversations
+    private var previousCommand: Map<String, String>? = null
+    private var hasMissingInfo = false
+    
     // BroadcastReceiver for wake word detection
     private val wakeWordReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -369,11 +373,11 @@ class MainActivity : AppCompatActivity() {
     private fun generateAndPlayTtsResponse(transcription: String) {
         lifecycleScope.launch {
             try {
-                // Send transcription to OpenAI Workflow
+                // Send transcription to OpenAI Workflow with previous context
                 binding.statusText.text = "AI elemzés folyamatban..."
                 
                 val workflowResponse = withContext(Dispatchers.IO) {
-                    workflowService.sendMessageToWorkflow(transcription)
+                    workflowService.sendMessageToWorkflow(transcription, previousCommand)
                 }
                 
                 Log.d("MainActivity", "AI JSON response: $workflowResponse")
@@ -386,12 +390,25 @@ class MainActivity : AppCompatActivity() {
                     return@launch
                 }
                 
-                // Parse JSON response
-                val (humanResponse, jsonData) = parseJsonResponse(workflowResponse)
+                // Parse full server response (including has_missing_info)
+                val (humanResponse, jsonData, hasMissing) = parseFullServerResponse(workflowResponse)
                 
                 // Update UI with parsed data
                 withContext(Dispatchers.Main) {
                     binding.statusText.text = "Command: ${jsonData["room"]} - ${jsonData["device"]} - ${jsonData["command"]}"
+                }
+                
+                // Handle missing information
+                if (hasMissing) {
+                    // Store current command as context for next request
+                    previousCommand = jsonData.filterValues { it.isNotEmpty() }
+                    hasMissingInfo = true
+                    
+                    Log.d("MainActivity", "Missing info detected. Stored context: $previousCommand")
+                } else {
+                    // Command complete, reset context
+                    previousCommand = null
+                    hasMissingInfo = false
                 }
                 
                 Log.d("MainActivity", "Human response: $humanResponse")
@@ -439,6 +456,69 @@ class MainActivity : AppCompatActivity() {
                     Toast.makeText(this@MainActivity, "Hiba történt: ${e.message}", Toast.LENGTH_SHORT).show()
                 }
             }
+        }
+    }
+    
+    private fun parseFullServerResponse(serverResponse: String): Triple<String, Map<String, String>, Boolean> {
+        return try {
+            val fullResponse = JSONObject(serverResponse)
+            val success = fullResponse.optBoolean("success", false)
+            val hasMissingInfo = fullResponse.optBoolean("has_missing_info", false)
+            
+            if (!success) {
+                return Triple("Hiba történt a feldolgozás során.", emptyMap(), false)
+            }
+            
+            val result = fullResponse.optJSONObject("result")
+            if (result == null) {
+                return Triple("Nem sikerült értelmezni a választ.", emptyMap(), false)
+            }
+            
+            val room = result.optString("room", "")
+            val device = result.optString("device", "")
+            val command = result.optString("command", "")
+            
+            Log.d("MainActivity", "Parsed - Room: $room, Device: $device, Command: $command, Missing: $hasMissingInfo")
+            
+            // Create human-friendly response
+            val humanResponse = if (hasMissingInfo) {
+                // Build question about missing information
+                val missingArray = result.optJSONArray("missing_information")
+                val missingFields = mutableListOf<String>()
+                
+                if (missingArray != null) {
+                    for (i in 0 until missingArray.length()) {
+                        val item = missingArray.getJSONObject(i)
+                        val fieldName = item.optString("fieldName", "")
+                        missingFields.add(fieldName)
+                    }
+                }
+                
+                when {
+                    missingFields.contains("room") && missingFields.contains("device") -> 
+                        "Which room and which device?"
+                    missingFields.contains("room") -> 
+                        "Which room?"
+                    missingFields.contains("device") -> 
+                        "Which device?"
+                    else -> 
+                        "Please provide more details."
+                }
+            } else {
+                // Simple property-value format
+                "Room: $room. Device: $device. Command: $command."
+            }
+            
+            val dataMap = mapOf(
+                "room" to room,
+                "device" to device,
+                "command" to command
+            )
+            
+            Triple(humanResponse, dataMap, hasMissingInfo)
+        } catch (e: Exception) {
+            Log.e("MainActivity", "Error parsing server response", e)
+            Triple("Nem sikerült értelmezni a választ.", emptyMap(), false)
         }
     }
     
