@@ -406,7 +406,8 @@ class MainActivity : AppCompatActivity() {
                     
                     Log.d("MainActivity", "Missing info detected. Stored context: $previousCommand")
                 } else {
-                    // Command complete, reset context
+                    // Command complete, clear context for next command
+                    Log.d("MainActivity", "Command complete. Clearing previous context.")
                     previousCommand = null
                     hasMissingInfo = false
                 }
@@ -477,35 +478,21 @@ class MainActivity : AppCompatActivity() {
             val room = result.optString("room", "")
             val device = result.optString("device", "")
             val command = result.optString("command", "")
+            val missingInformation = result.optString("missing_information", "")
+            val resultSummary = result.optString("result", "")
             
-            Log.d("MainActivity", "Parsed - Room: $room, Device: $device, Command: $command, Missing: $hasMissingInfo")
+            Log.d("MainActivity", "Parsed - Room: $room, Device: $device, Command: $command")
+            Log.d("MainActivity", "Missing info: $missingInformation, Result: $resultSummary")
             
-            // Create human-friendly response
-            val humanResponse = if (hasMissingInfo) {
-                // Build question about missing information
-                val missingArray = result.optJSONArray("missing_information")
-                val missingFields = mutableListOf<String>()
-                
-                if (missingArray != null) {
-                    for (i in 0 until missingArray.length()) {
-                        val item = missingArray.getJSONObject(i)
-                        val fieldName = item.optString("fieldName", "")
-                        missingFields.add(fieldName)
-                    }
-                }
-                
-                when {
-                    missingFields.contains("room") && missingFields.contains("device") -> 
-                        "Which room and which device?"
-                    missingFields.contains("room") -> 
-                        "Which room?"
-                    missingFields.contains("device") -> 
-                        "Which device?"
-                    else -> 
-                        "Please provide more details."
-                }
+            // Choose what to read based on missing_information
+            val humanResponse = if (missingInformation.isNotEmpty()) {
+                // Read the missing information question
+                missingInformation
+            } else if (resultSummary.isNotEmpty()) {
+                // Read the result summary
+                resultSummary
             } else {
-                // Simple property-value format
+                // Fallback to property-value format
                 "Room: $room. Device: $device. Command: $command."
             }
             
