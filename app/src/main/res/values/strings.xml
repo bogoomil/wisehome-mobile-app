@@ -1,12 +1,13 @@
 <resources>
-    <string name="app_name">Voice Transcription App</string>
-    <string name="record_button">Record</string>
-    <string name="stop_recording">Stop Recording</string>
-    <string name="transcription_placeholder">Transcription will appear here...</string>
-    <string name="recording_status">Recording...</string>
-    <string name="processing_status">Processing...</string>
-    <string name="error_recording">Error recording audio</string>
-    <string name="error_transcription">Error transcribing audio</string>
-    <string name="permission_required">Microphone permission is required</string>
-    <string name="permission_denied">Permission denied</string>
+    <string name="app_name">Okosotthon Vezérlő</string>
+    <string name="record_button">Felvétel</string>
+    <string name="stop_recording">Leállítás</string>
+    <string name="reset_conversation">Előzmények Törlése</string>
+    <string name="conversation_placeholder">Az előzmények itt jelennek meg...</string>
+    <string name="recording_status">Felvétel...</string>
+    <string name="processing_status">Feldolgozás...</string>
+    <string name="error_recording">Hiba a felvétel során</string>
+    <string name="error_transcription">Hiba az átirat során</string>
+    <string name="permission_required">Mikrofon engedély szükséges</string>
+    <string name="permission_denied">Engedély megtagadva</string>
 </resources>

@@ -12,6 +12,7 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Environment
 import android.util.Log
+import android.view.View
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
@@ -94,20 +95,22 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun setupUI() {
+        // Single tap: record/stop, Double tap: toggle TTS mode
+        var lastTapTime = 0L
         binding.recordButton.setOnClickListener {
-            if (isRecording) {
-                stopRecording()
+            val currentTime = System.currentTimeMillis()
+            if (currentTime - lastTapTime < 300) {
+                // Double tap detected - toggle TTS mode
+                toggleTtsMode()
             } else {
-                startRecording()
+                // Single tap - record/stop
+                if (isRecording) {
+                    stopRecording()
+                } else {
+                    startRecording()
+                }
             }
-        }
-        
-        binding.compareButton.setOnClickListener {
-            compareTranscription()
-        }
-        
-        binding.clearCacheButton.setOnClickListener {
-            clearAllRecordings()
+            lastTapTime = currentTime
         }
         
         binding.resetConversationButton.setOnClickListener {
@@ -120,71 +123,31 @@ class MainActivity : AppCompatActivity() {
             true
         }
         
-        // TTS Mode toggle - double tap Compare button
-        updateTtsModeButton()
-        
         // Clear previous recordings on app start
         clearOldRecordings()
     }
     
-    private fun updateTtsModeButton() {
-        val emoji = if (useFastTts) "⚡" else "⭐"
-        val currentText = binding.recordButton.text.toString()
-        val baseText = currentText.replace("⚡ ", "").replace("⭐ ", "")
-        binding.recordButton.text = "$emoji $baseText"
+    private fun toggleTtsMode() {
+        useFastTts = !useFastTts
+        val mode = if (useFastTts) "⚡ Gyors mód" else "⭐ Minőségi mód"
+        Toast.makeText(this, "TTS: $mode", Toast.LENGTH_SHORT).show()
+        Log.d("MainActivity", "TTS mode toggled: useFastTts=$useFastTts")
     }
     
-    private fun compareTranscription() {
-        val expectedText = binding.expectedTextInput.text.toString().trim()
-        val actualText = binding.transcriptionText.text.toString().trim()
-        
-        if (expectedText.isNotEmpty() && actualText.isNotEmpty()) {
-            val similarity = calculateSimilarity(expectedText, actualText)
-            val accuracy = (similarity * 100).toInt()
-            
-            binding.statusText.text = "Accuracy: $accuracy%"
-            
-            if (accuracy < 70) {
-                Toast.makeText(this, "Low accuracy - try speaking more clearly", Toast.LENGTH_LONG).show()
-            } else if (accuracy < 90) {
-                Toast.makeText(this, "Good accuracy", Toast.LENGTH_SHORT).show()
-            } else {
-                Toast.makeText(this, "Excellent accuracy!", Toast.LENGTH_SHORT).show()
-            }
+    private fun appendToConversation(text: String, isRequest: Boolean = false) {
+        val currentText = binding.conversationText.text.toString()
+        val prefix = if (isRequest) "\n\n>>> KÉRÉS:\n" else "\n\n<<< VÁLASZ:\n"
+        val formattedText = if (currentText == getString(R.string.conversation_placeholder)) {
+            (if (isRequest) ">>> KÉRÉS:\n" else "<<< VÁLASZ:\n") + text
         } else {
-            Toast.makeText(this, "Please enter expected text and get transcription first", Toast.LENGTH_LONG).show()
+            currentText + prefix + text
         }
-    }
-    
-    private fun calculateSimilarity(s1: String, s2: String): Double {
-        val longer = if (s1.length > s2.length) s1 else s2
-        val shorter = if (s1.length > s2.length) s2 else s1
+        binding.conversationText.text = formattedText
         
-        if (longer.isEmpty()) return 1.0
-        
-        val editDistance = levenshteinDistance(longer.lowercase(), shorter.lowercase())
-        return (longer.length - editDistance).toDouble() / longer.length
-    }
-    
-    private fun levenshteinDistance(s1: String, s2: String): Int {
-        val costs = IntArray(s2.length + 1)
-        for (i in 0..s1.length) {
-            var lastValue = i
-            for (j in 0..s2.length) {
-                if (i == 0) {
-                    costs[j] = j
-                } else if (j > 0) {
-                    var newValue = costs[j - 1]
-                    if (s1[i - 1] != s2[j - 1]) {
-                        newValue = minOf(newValue, lastValue, costs[j]) + 1
-                    }
-                    costs[j - 1] = lastValue
-                    lastValue = newValue
-                }
-            }
-            if (i > 0) costs[s2.length] = lastValue
+        // Auto-scroll to bottom
+        binding.conversationScrollView.post {
+            binding.conversationScrollView.fullScroll(View.FOCUS_DOWN)
         }
-        return costs[s2.length]
     }
     
     private fun clearOldRecordings() {
@@ -208,43 +171,20 @@ class MainActivity : AppCompatActivity() {
         }
     }
     
-    private fun clearAllRecordings() {
-        try {
-            val audioDir = File(getExternalFilesDir(Environment.DIRECTORY_MUSIC), "VoiceRecordings")
-            if (audioDir.exists()) {
-                val files = audioDir.listFiles()
-                var deletedCount = 0
-                files?.forEach { file ->
-                    if (file.isFile && file.name.startsWith("recording_")) {
-                        if (file.delete()) {
-                            deletedCount++
-                            Log.d("MainActivity", "Deleted recording: ${file.name}")
-                        }
-                    }
-                }
-                Toast.makeText(this, "Deleted $deletedCount recordings", Toast.LENGTH_SHORT).show()
-                binding.statusText.text = "Cache cleared: $deletedCount files deleted"
-            } else {
-                Toast.makeText(this, "No recordings found", Toast.LENGTH_SHORT).show()
-            }
-        } catch (e: Exception) {
-            Log.e("MainActivity", "Error clearing all recordings", e)
-            Toast.makeText(this, "Error clearing cache", Toast.LENGTH_SHORT).show()
-        }
-    }
-    
     private fun resetConversationHistory() {
         try {
             val previousSize = conversationHistory.size
             conversationHistory.clear()
             hasMissingInfo = false
             
+            // Clear the conversation text
+            binding.conversationText.text = getString(R.string.conversation_placeholder)
+            
             Log.d("MainActivity", "Conversation history reset. Cleared $previousSize messages.")
-            Toast.makeText(this, "Conversation history reset ($previousSize messages cleared)", Toast.LENGTH_SHORT).show()
-            binding.statusText.text = "Conversation history reset"
+            Toast.makeText(this, "Előzmények törölve ($previousSize üzenet)", Toast.LENGTH_SHORT).show()
         } catch (e: Exception) {
             Log.e("MainActivity", "Error resetting conversation history", e)
-            Toast.makeText(this, "Error resetting conversation", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "Hiba az előzmények törlésekor", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -263,7 +203,6 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun setupRecording() {
-        binding.statusText.text = "Ready to record"
         binding.recordButton.isEnabled = true
     }
 
@@ -297,8 +236,6 @@ class MainActivity : AppCompatActivity() {
                     recordingStartTime = System.currentTimeMillis()
                     binding.recordButton.text = getString(R.string.stop_recording)
                     binding.recordButton.setBackgroundColor(getColor(R.color.stop_button))
-                    binding.statusText.text = getString(R.string.recording_status)
-                    binding.transcriptionText.text = ""
                     
                     Log.d("MainActivity", "Recording started at: $recordingStartTime")
                     
@@ -324,7 +261,6 @@ class MainActivity : AppCompatActivity() {
             isRecording = false
             binding.recordButton.text = getString(R.string.record_button)
             binding.recordButton.setBackgroundColor(getColor(R.color.record_button))
-            binding.statusText.text = getString(R.string.processing_status)
             
             // Process the recorded audio
             audioFile?.let { file ->
@@ -332,25 +268,12 @@ class MainActivity : AppCompatActivity() {
                     val fileSizeKB = file.length() / 1024
                     val fullPath = file.absolutePath
                     val recordingDuration = (System.currentTimeMillis() - recordingStartTime) / 1000.0
-                    val expectedSizeKB = (recordingDuration * 32) / 8  // 32 kbps for optimized AAC
                     
-                    Log.d("MainActivity", "Audio file full path: $fullPath")
-                    Log.d("MainActivity", "Audio file size: ${fileSizeKB}KB")
-                    Log.d("MainActivity", "Recording duration: ${recordingDuration}s")
-                    Log.d("MainActivity", "Expected size: ${expectedSizeKB.toInt()}KB")
-                    Log.d("MainActivity", "File last modified: ${file.lastModified()}")
-                    
-                    val sizeRatio = if (expectedSizeKB > 0) (fileSizeKB / expectedSizeKB * 100).toInt() else 0
-                    binding.statusText.text = "Audio: ${fileSizeKB}KB (${recordingDuration}s)\nExpected: ${expectedSizeKB.toInt()}KB\nRatio: ${sizeRatio}%\nPath: ${file.name}"
-                    
-                    if (sizeRatio < 50) {
-                        Toast.makeText(this, "Warning: File size seems too small!", Toast.LENGTH_LONG).show()
-                    }
+                    Log.d("MainActivity", "Audio file: $fullPath, size: ${fileSizeKB}KB, duration: ${recordingDuration}s")
                     
                     transcribeAudio(file)
                 } else {
-                    Toast.makeText(this, "No audio recorded", Toast.LENGTH_SHORT).show()
-                    binding.statusText.text = "No audio recorded"
+                    Toast.makeText(this, "Nem sikerült a felvétel", Toast.LENGTH_SHORT).show()
                 }
             }
             
@@ -369,20 +292,18 @@ class MainActivity : AppCompatActivity() {
                 
                 withContext(Dispatchers.Main) {
                     if (transcription.isNotEmpty()) {
-                        binding.transcriptionText.text = transcription
-                        binding.statusText.text = "Transcription completed"
+                        // Show transcription in conversation
+                        appendToConversation(transcription, isRequest = true)
                         
                         // Generate TTS response
                         generateAndPlayTtsResponse(transcription)
                     } else {
-                        binding.transcriptionText.text = "No transcription available"
-                        binding.statusText.text = "Transcription failed"
+                        Toast.makeText(this@MainActivity, "Nem sikerült az átírás", Toast.LENGTH_SHORT).show()
                     }
                 }
             } catch (e: Exception) {
                 Log.e("MainActivity", "Transcription failed", e)
                 withContext(Dispatchers.Main) {
-                    binding.statusText.text = "Transcription failed"
                     Toast.makeText(this@MainActivity, getString(R.string.error_transcription), Toast.LENGTH_SHORT).show()
                 }
             }
@@ -393,8 +314,6 @@ class MainActivity : AppCompatActivity() {
         lifecycleScope.launch {
             try {
                 // Send transcription to OpenAI Workflow with conversation history
-                binding.statusText.text = "AI elemzés folyamatban..."
-                
                 val workflowResponse = withContext(Dispatchers.IO) {
                     workflowService.sendMessageToWorkflow(transcription, conversationHistory)
                 }
@@ -403,7 +322,7 @@ class MainActivity : AppCompatActivity() {
                 
                 if (workflowResponse.isEmpty() || workflowResponse.startsWith("Hiba")) {
                     withContext(Dispatchers.Main) {
-                        binding.statusText.text = "AI hiba: $workflowResponse"
+                        appendToConversation("HIBA: $workflowResponse", isRequest = false)
                         Toast.makeText(this@MainActivity, workflowResponse, Toast.LENGTH_LONG).show()
                     }
                     return@launch
@@ -412,9 +331,14 @@ class MainActivity : AppCompatActivity() {
                 // Parse full server response (including has_missing_info)
                 val (humanResponse, jsonData, hasMissing) = parseFullServerResponse(workflowResponse)
                 
-                // Update UI with parsed data
+                // Display JSON response in conversation
                 withContext(Dispatchers.Main) {
-                    binding.statusText.text = "Command: ${jsonData["room"]} - ${jsonData["device"]} - ${jsonData["command"]}"
+                    val formattedJson = try {
+                        JSONObject(workflowResponse).toString(2)
+                    } catch (e: Exception) {
+                        workflowResponse
+                    }
+                    appendToConversation(formattedJson, isRequest = false)
                 }
                 
                 // Handle missing information
@@ -437,17 +361,11 @@ class MainActivity : AppCompatActivity() {
                 // Now read the human-friendly response using TTS
                 if (useFastTts) {
                     // Fast mode: Android TTS (instant)
-                    binding.statusText.text = "Válasz lejátszása (gyors mód)..."
-                    
                     withContext(Dispatchers.Main) {
-                        androidTtsService.speak(humanResponse) {
-                            binding.statusText.text = "Command executed: ${jsonData["room"]} - ${jsonData["device"]}"
-                        }
+                        androidTtsService.speak(humanResponse) {}
                     }
                 } else {
                     // Quality mode: OpenAI TTS
-                    binding.statusText.text = "Beszéd generálása (minőségi mód)..."
-                    
                     // Create output file for TTS audio
                     val ttsDir = File(getExternalFilesDir(Environment.DIRECTORY_MUSIC), "TtsAudio")
                     if (!ttsDir.exists()) {
@@ -462,10 +380,8 @@ class MainActivity : AppCompatActivity() {
                     
                     withContext(Dispatchers.Main) {
                         if (success && ttsFile.exists()) {
-                            binding.statusText.text = "Válasz lejátszása..."
                             playAudio(ttsFile)
                         } else {
-                            binding.statusText.text = "Beszéd generálás sikertelen"
                             Toast.makeText(this@MainActivity, "Beszéd generálás sikertelen", Toast.LENGTH_SHORT).show()
                         }
                     }
@@ -473,7 +389,7 @@ class MainActivity : AppCompatActivity() {
             } catch (e: Exception) {
                 Log.e("MainActivity", "Workflow vagy TTS hiba", e)
                 withContext(Dispatchers.Main) {
-                    binding.statusText.text = "Hiba: ${e.message}"
+                    appendToConversation("HIBA: ${e.message}", isRequest = false)
                     Toast.makeText(this@MainActivity, "Hiba történt: ${e.message}", Toast.LENGTH_SHORT).show()
                 }
             }
@@ -571,7 +487,6 @@ class MainActivity : AppCompatActivity() {
                     Log.d("MainActivity", "Playing TTS audio: ${audioFile.absolutePath}")
                 }
                 setOnCompletionListener {
-                    binding.statusText.text = "Playback completed"
                     release()
                     mediaPlayer = null
                     
@@ -580,7 +495,6 @@ class MainActivity : AppCompatActivity() {
                 }
                 setOnErrorListener { mp, what, extra ->
                     Log.e("MainActivity", "MediaPlayer error: what=$what, extra=$extra")
-                    binding.statusText.text = "Playback error"
                     release()
                     mediaPlayer = null
                     true
@@ -589,7 +503,6 @@ class MainActivity : AppCompatActivity() {
             }
         } catch (e: Exception) {
             Log.e("MainActivity", "Error playing audio", e)
-            binding.statusText.text = "Playback failed"
             Toast.makeText(this, "Error playing audio", Toast.LENGTH_SHORT).show()
         }
     }
@@ -637,9 +550,8 @@ class MainActivity : AppCompatActivity() {
         WakeWordService.startService(this)
         isWakeWordListening = true
         
-        binding.recordButton.text = "🎤 Listening for 'Hello Al'"
+        binding.recordButton.text = "🎤 'Hello Al'"
         binding.recordButton.setBackgroundColor(getColor(android.R.color.holo_green_light))
-        binding.statusText.text = "Wake word mode active. Say 'Hello Al' to start recording."
         
         Toast.makeText(this, "Wake Word Mode Started\nSay 'Hello Al' to trigger recording", Toast.LENGTH_LONG).show()
         Log.i("MainActivity", "Wake word listening started")
@@ -651,7 +563,6 @@ class MainActivity : AppCompatActivity() {
         
         binding.recordButton.text = getString(R.string.record_button)
         binding.recordButton.setBackgroundColor(getColor(R.color.record_button))
-        binding.statusText.text = "Wake word mode stopped. Press button to record manually."
         
         Toast.makeText(this, "Wake Word Mode Stopped", Toast.LENGTH_SHORT).show()
         Log.i("MainActivity", "Wake word listening stopped")
@@ -662,7 +573,6 @@ class MainActivity : AppCompatActivity() {
         
         // Visual feedback
         runOnUiThread {
-            binding.statusText.text = "✅ Wake word detected! Starting auto-recording..."
             binding.recordButton.setBackgroundColor(getColor(android.R.color.holo_orange_dark))
             
             // Haptic feedback
@@ -707,7 +617,7 @@ class MainActivity : AppCompatActivity() {
                 withContext(Dispatchers.Main) {
                     if (isWakeWordListening) {
                         binding.recordButton.setBackgroundColor(getColor(android.R.color.holo_green_light))
-                        binding.statusText.text = "🎤 Listening for 'Hello Al'..."
+                        binding.recordButton.text = "🎤 'Hello Al'"
                     }
                 }
                 
