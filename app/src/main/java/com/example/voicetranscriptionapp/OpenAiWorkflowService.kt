@@ -15,23 +15,23 @@ class OpenAiWorkflowService {
      * Sends transcribed text to wisehome.hu server and gets JSON response
      * 
      * @param userMessage The transcribed user message
-     * @param previousContext Previous command context (room, device, command) if available
+     * @param conversationHistory Previous messages in the conversation
      * @return Full server response as JSON string
      */
     suspend fun sendMessageToWorkflow(
         userMessage: String, 
-        previousContext: Map<String, String>? = null
+        conversationHistory: List<String> = emptyList()
     ): String {
         return try {
             Log.d("OpenAiWorkflow", "Sending to wisehome.hu server")
             Log.d("OpenAiWorkflow", "User message: $userMessage")
-            Log.d("OpenAiWorkflow", "Previous context: $previousContext")
+            Log.d("OpenAiWorkflow", "Conversation history: $conversationHistory")
             Log.d("OpenAiWorkflow", "Server URL: $serverUrl")
             
-            // Build enhanced message with context if available
-            val enhancedMessage = if (previousContext != null && previousContext.isNotEmpty()) {
-                val contextParts = previousContext.entries.joinToString(", ") { "${it.key}: ${it.value}" }
-                "Context: $contextParts. User said: $userMessage"
+            // Build enhanced message with conversation history if available
+            val enhancedMessage = if (conversationHistory.isNotEmpty()) {
+                val historyText = conversationHistory.joinToString(". ")
+                "$historyText. $userMessage"
             } else {
                 userMessage
             }

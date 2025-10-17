@@ -41,8 +41,8 @@ class MainActivity : AppCompatActivity() {
     private var isWakeWordListening = false
     private var isAutoRecording = false
     
-    // Previous command context for multi-turn conversations
-    private var previousCommand: Map<String, String>? = null
+    // Conversation history for multi-turn conversations
+    private val conversationHistory = mutableListOf<String>()
     private var hasMissingInfo = false
     
     // BroadcastReceiver for wake word detection
@@ -373,11 +373,11 @@ class MainActivity : AppCompatActivity() {
     private fun generateAndPlayTtsResponse(transcription: String) {
         lifecycleScope.launch {
             try {
-                // Send transcription to OpenAI Workflow with previous context
+                // Send transcription to OpenAI Workflow with conversation history
                 binding.statusText.text = "AI elemzés folyamatban..."
                 
                 val workflowResponse = withContext(Dispatchers.IO) {
-                    workflowService.sendMessageToWorkflow(transcription, previousCommand)
+                    workflowService.sendMessageToWorkflow(transcription, conversationHistory)
                 }
                 
                 Log.d("MainActivity", "AI JSON response: $workflowResponse")
@@ -400,15 +400,16 @@ class MainActivity : AppCompatActivity() {
                 
                 // Handle missing information
                 if (hasMissing) {
-                    // Store current command as context for next request
-                    previousCommand = jsonData.filterValues { it.isNotEmpty() }
+                    // Add current transcription to conversation history
+                    conversationHistory.add(transcription)
                     hasMissingInfo = true
                     
-                    Log.d("MainActivity", "Missing info detected. Stored context: $previousCommand")
+                    Log.d("MainActivity", "Missing info detected. Added to history: $transcription")
+                    Log.d("MainActivity", "Conversation history: $conversationHistory")
                 } else {
-                    // Command complete, clear context for next command
-                    Log.d("MainActivity", "Command complete. Clearing previous context.")
-                    previousCommand = null
+                    // Command complete, clear conversation history for next command
+                    Log.d("MainActivity", "Command complete. Clearing conversation history.")
+                    conversationHistory.clear()
                     hasMissingInfo = false
                 }
                 
