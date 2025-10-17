@@ -110,6 +110,10 @@ class MainActivity : AppCompatActivity() {
             clearAllRecordings()
         }
         
+        binding.resetConversationButton.setOnClickListener {
+            resetConversationHistory()
+        }
+        
         // Long press Record button to toggle Wake Word mode
         binding.recordButton.setOnLongClickListener {
             toggleWakeWordMode()
@@ -226,6 +230,21 @@ class MainActivity : AppCompatActivity() {
         } catch (e: Exception) {
             Log.e("MainActivity", "Error clearing all recordings", e)
             Toast.makeText(this, "Error clearing cache", Toast.LENGTH_SHORT).show()
+        }
+    }
+    
+    private fun resetConversationHistory() {
+        try {
+            val previousSize = conversationHistory.size
+            conversationHistory.clear()
+            hasMissingInfo = false
+            
+            Log.d("MainActivity", "Conversation history reset. Cleared $previousSize messages.")
+            Toast.makeText(this, "Conversation history reset ($previousSize messages cleared)", Toast.LENGTH_SHORT).show()
+            binding.statusText.text = "Conversation history reset"
+        } catch (e: Exception) {
+            Log.e("MainActivity", "Error resetting conversation history", e)
+            Toast.makeText(this, "Error resetting conversation", Toast.LENGTH_SHORT).show()
         }
     }
 
